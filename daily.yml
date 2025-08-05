@@ -1,0 +1,36 @@
+name: daily-shorts
+
+on:
+  schedule:
+    - cron: "0 15 * * *"   # UTC 15:00 ≈ TR 18:00
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg fonts-dejavu-core
+          python -m pip install --upgrade pip
+          pip install requests
+
+      - name: Fetch drift clips from Pexels
+        env:
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+        run: |
+          python scripts/fetch_pexels.py --n 10
+
+      - name: Make 5 Shorts
+        run: |
+          python scripts/make_shorts.py
+
+      - name: Upload outputs as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: shorts_outputs
+          path: outputs/*.mp4
