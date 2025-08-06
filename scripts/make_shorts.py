@@ -6,7 +6,7 @@ OUT   = "outputs"
 MUSIC = "music"
 LOGO  = "logo/20ssec_logo.png"
 
-# Hedef süre (sn). İstersen Actions'da TARGET_SEC ile geçersiz kılabilirsin.
+# Hedef süre (sn). Actions'ta TARGET_SEC ile geçersiz kılabilirsin.
 TARGET_SEC = float(os.getenv("TARGET_SEC", "20"))
 # Kaç video üretilecek
 MAX_VIDS = int(os.getenv("MAX_VIDS", "5"))
@@ -22,45 +22,46 @@ def ffprobe_duration(path: str):
         return None
 
 def choose_music_offset(music_path: str, seg_len: float) -> float:
+    """Müziği introyu atlayarak başlat: parçanın %15–65 arası bir yerden."""
     dur = ffprobe_duration(music_path) or 0.0
     if dur <= seg_len + 1:
         return 0.0
-    lo = max(0.0, dur * 0.15)                 # introyu atla
-    hi = max(lo, dur * 0.65 - seg_len)        # ortalara kadar
+    lo = max(0.0, dur * 0.15)
+    hi = max(lo, dur * 0.65 - seg_len)
     return round(random.uniform(lo, hi), 2)
 
 def build_cmd(inp, outp, music=None, logo=LOGO, src_dur=None):
-    # Kaynak süresi
-    Dsrc = src_dur or ffprobe_duration(inp) or 6.0
-    # Hedef süre
+    # Kaynak süre ve hedef süre
+    dsrc = src_dur or ffprobe_duration(inp) or 6.0
     T = TARGET_SEC
 
-    # Girişler
+    # ---- GİRİŞLER ----
     inputs = f'-i "{inp}"'
 
-    # Logo (şeffaf PNG): güvenli image2 + loop
+    # Logo (şeffaf PNG → güvenli image2 + loop)
     use_logo = os.path.exists(logo)
     if use_logo:
         inputs += f' -framerate 30 -loop 1 -f image2 -pattern_type none -i "{logo}"'
 
-    # Müzik: intro atla + fade + normalize
+    # Müzik (intro skip + fade + normalize)
     idx_audio_map = "-an"
     afilters = ""
     if music and os.path.exists(music):
-    mstart = choose_music_offset(music, T)
-    mstart = float(os.getenv("MUSIC_START", mstart))  # env ile override edilebilir
-    inputs += f' -ss {mstart} -i "{music}"'
-    idx_audio_map = "-map 2:a"  # ← doğru satır (kapanış tırnağı yok)
-    af_in = 0.35
-    af_out = max(T - 0.60, 0)
-    afilters = (
-        f'-af "loudnorm=I=-17:TP=-1.5:LRA=11,'
-        f'afade=t=in:st=0:d={af_in},'
-        f'afade=t=out:st={af_out:.2f}:d=0.6"'
-    )
+        mstart = choose_music_offset(music, T)
+        # İstersen env ile zorlayabilirsin: MUSIC_START=8.5
+        mstart = float(os.getenv("MUSIC_START", mstart))
+        inputs += f' -ss {mstart} -i "{music}"'
+        idx_audio_map = "-map 2:a"
+        af_in = 0.35
+        af_out = max(T - 0.60, 0)
+        afilters = (
+            f'-af "loudnorm=I=-17:TP=-1.5:LRA=11,'
+            f'afade=t=in:st=0:d={af_in},'
+            f'afade=t=out:st={af_out:.2f}:d=0.6"'
+        )
 
-
-    # 720x1280, hafif aydınlatma
+    # ---- FİLTRE ----
+    # 720x1280 + hafif aydınlatma
     base = (
         "[0:v]fps=30,scale=-2:1280:force_original_aspect_ratio=decrease,"
         "crop=720:1280,eq=brightness=0.05:contrast=1.1:gamma=0.92[base];"
@@ -76,22 +77,22 @@ def build_cmd(inp, outp, music=None, logo=LOGO, src_dur=None):
     else:
         last = "[base]"
 
-    # Kısa klipleri 20s'e TAMAMLAMA (son 2–4 sn tekrar)
-    # Dsrc < T ise: last -> split -> tail trim -> concat -> [vid]
-    if Dsrc < T - 0.25:
-        tail = max(2.0, min(4.0, Dsrc * 0.4))
-        tail_start = max(Dsrc - tail, 0)
+    # Kısaysa 20 sn'ye tamamla: son 2–4 saniyeyi ekleyip concat
+    if dsrc < T - 0.25:
+        tail = max(2.0, min(4.0, dsrc * 0.4))
+        tail_start = max(dsrc - tail, 0)
         fc = (
             base +
             f"{last}split[vmain][vtail];"
-            f"[vtail]trim=start={tail_start}:end={Dsrc},setpts=PTS-STARTPTS[vt];"
+            f"[vtail]trim=start={tail_start}:end={dsrc},setpts=PTS-STARTPTS[vt];"
             f"[vmain][vt]concat=n=2:v=1:a=0,format=yuv420p[vid]"
         )
     else:
-        # Uzunsa/yakınsa: sadece formatla bitir
+        # Yeterince uzunsa: doğrudan formatla
         fc = base + f"{last}format=yuv420p[vid]"
 
-    # Komut (T saniyede bitir; -shortest ile ses de kesilir)
+    # ---- KOMUT ----
+    # -t {T} ile toplamı hedef sürede kes; -shortest sesle uyumlar
     cmd = (
         f'ffmpeg -y -hide_banner -stats -loglevel info '
         f'{inputs} -t {T} -filter_complex "{fc}" '
@@ -109,7 +110,8 @@ def main():
         glob.glob(os.path.join(RAW, "*.mkv"))
     )
     if not vids:
-        print("[ERR] raw_clips empty"); return
+        print("[ERR] raw_clips empty")
+        return
 
     random.shuffle(vids)
     pick = vids[:MAX_VIDS]
@@ -118,8 +120,8 @@ def main():
     for i, v in enumerate(pick, 1):
         m = random.choice(musics) if musics else None
         outp = os.path.join(OUT, f"20ssec_output_{i}.mp4")
-        D = ffprobe_duration(v)
-        cmd = build_cmd(v, outp, music=m, src_dur=D)
+        d = ffprobe_duration(v)
+        cmd = build_cmd(v, outp, music=m, src_dur=d)
         print("[CMD]", cmd)
         subprocess.run(cmd, shell=True, check=True)
         print("[OK]", outp)
