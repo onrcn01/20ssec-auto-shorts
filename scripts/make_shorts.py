@@ -6,20 +6,29 @@ OUT = "outputs"
 MUSIC = "music"
 LOGO = "logo/20ssec_logo.png"
 
-MAX_VIDS = 5
 HOOKS = [
-  "Name a cleaner 360 🌀",
-  "Wait for it… 👇",
-  "POV: No grip, full control",
-  "Rate this 1–10 👇",
-  "He didn’t turn — he slid."
+  "Name a cleaner 360",
+  "Wait for it...",
+  "POV No grip full control",
+  "Rate this 1-10",
+  "He didnt turn he slid"
 ]
+
 
 def ffprobe_duration(path):
     cmd = ["ffprobe","-v","error","-show_entries","format=duration","-of","default=nw=1:nk=1",path]
     out = subprocess.check_output(cmd, text=True).strip()
     try: return float(out)
     except: return None
+
+def sanitize_text(s: str) -> str:
+    # drawtext için güvenli: iki nokta kaçışı, tek tırnak kaçışı,
+    # emoji/unicode -> ASCII (olmayanları at)
+    s = s.replace(":", r"\:")
+    s = s.replace("'", r"\'")
+    s = s.encode("ascii", "ignore").decode()
+    s = " ".join(s.split())  # fazla boşlukları temizle
+    return s
 
 def build_cmd(inp, outp, music=None, logo=LOGO, hook_text=None, dur_hint=None):
     D = dur_hint or ffprobe_duration(inp) or 12.0
@@ -35,7 +44,9 @@ def build_cmd(inp, outp, music=None, logo=LOGO, hook_text=None, dur_hint=None):
     logo_part = f' -i "{logo}"' if os.path.exists(logo) else ""
 
     font = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-    hook = (hook_text or random.choice(HOOKS)).replace('"', '\\"')
+    hook_raw = (hook_text or random.choice(HOOKS)).replace('"','\\"')
+    hook = sanitize_text(hook_raw)
+
 
     # filter_complex metni
     fc = (
