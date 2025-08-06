@@ -47,13 +47,18 @@ def build_cmd(inp, outp, music=None, logo=LOGO, src_dur=None):
     idx_audio_map = "-an"
     afilters = ""
     if music and os.path.exists(music):
-        mstart = choose_music_offset(music, T)
-        mstart = float(os.getenv("MUSIC_START", mstart))
-        inputs += f' -ss {mstart} -i "{music}"'
-        idx_audio_map = "-map 2:a'
-        af_in = 0.35
-        af_out = max(T - 0.60, 0)
-        afilters = f'-af "loudnorm=I=-17:TP=-1.5:LRA=11,afade=t=in:st=0:d={af_in},afade=t=out:st={af_out:.2f}:d=0.6"'
+    mstart = choose_music_offset(music, T)
+    mstart = float(os.getenv("MUSIC_START", mstart))  # env ile override edilebilir
+    inputs += f' -ss {mstart} -i "{music}"'
+    idx_audio_map = "-map 2:a"  # ← doğru satır (kapanış tırnağı yok)
+    af_in = 0.35
+    af_out = max(T - 0.60, 0)
+    afilters = (
+        f'-af "loudnorm=I=-17:TP=-1.5:LRA=11,'
+        f'afade=t=in:st=0:d={af_in},'
+        f'afade=t=out:st={af_out:.2f}:d=0.6"'
+    )
+
 
     # 720x1280, hafif aydınlatma
     base = (
