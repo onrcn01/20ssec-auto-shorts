@@ -31,7 +31,7 @@ def build_cmd(inp, outp, music=None, logo=LOGO, dur_hint=None):
     inputs = f'-i "{inp}"'
 
     # Logo: PNG tek kare → akış boyunca kullanmak için loopla
-    use_logo = os.path.exists(logo)
+    use_logo = False 
     if use_logo:
         inputs += f' -loop 1 -i "{logo}"'
 
