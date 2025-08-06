@@ -69,13 +69,10 @@ def build_cmd(inp, outp, music=None, logo=LOGO, hook_text=None, dur_hint=None):
         last = "[ol2]"
     else:
         last = "[base]"
+    
+   # SADE MOD: sadece progress bar (yazı yok, sorun çıkarmaz)
+    fc += f"{last}drawbox=x=0:y=h-20:w=w*t/{D}:h=10:color=white@0.7:t=max[vid]"
 
-    fc += (
-        f"{last}drawtext=fontfile={font}:text='{hook}':x=(w-text_w)/2:y=20:"
-        "fontsize=64:fontcolor=white:box=1:boxcolor=black@0.5:boxborderw=20:"
-        "enable='lte(t,0.8)'[t1];"
-        f"[t1]drawbox=x=0:y=h-20:w=w*t/{D}:h=10:color=white@0.7:t=max[vid]"
-    )
 
     cmd = (
         f'ffmpeg -y {inputs}{logo_part}{music_part} -filter_complex "{fc}" '
@@ -101,7 +98,10 @@ def main():
         D = ffprobe_duration(v)
         cmd = build_cmd(v, outp, music=m, dur_hint=D)
         print("\n[CMD]", cmd)
-        subprocess.run(shlex.split(cmd), check=True)
+        res = subprocess.run(cmd, shell=True, text=True, capture_output=True)
+        print(res.stdout)
+        print(res.stderr)
+        res.check_returncode()
         print("[OK]", outp)
 
 if __name__ == "__main__":
