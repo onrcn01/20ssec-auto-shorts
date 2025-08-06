@@ -6,8 +6,8 @@ OUT   = "outputs"
 MUSIC = "music"
 LOGO  = "logo/20ssec_logo.png"
 
-# Günlük kaç video?
-MAX_VIDS = int(os.getenv("MAX_VIDS", "5"))
+# İlk tur için 3 video (sonra 5/8 yaparız)
+MAX_VIDS = int(os.getenv("MAX_VIDS", "3"))
 
 def ffprobe_duration(path: str):
     try:
@@ -20,14 +20,14 @@ def ffprobe_duration(path: str):
         return None
 
 def build_cmd(inp, outp, music=None, logo=LOGO, dur_hint=None):
-    # Süre (şu an sadece -shortest için; hesaplamak şart değil)
+    # Maks 12 saniye
     D = dur_hint or ffprobe_duration(inp) or 12.0
-    D = min(D, 20.0)
+    D = min(D, 12.0)
 
     # Girişler
     inputs = f'-i "{inp}"'
 
-    # LOGO: PNG tek kare → image2 + loop ile güvenli, tek overlay (sağ-alt)
+    # LOGO (şeffaf PNG) – güvenli image2 + loop
     use_logo = os.path.exists(logo)
     if use_logo:
         inputs += f' -framerate 30 -loop 1 -f image2 -pattern_type none -i "{logo}"'
@@ -38,25 +38,26 @@ def build_cmd(inp, outp, music=None, logo=LOGO, dur_hint=None):
         inputs += f' -stream_loop -1 -i "{music}"'
         idx_audio_map = "-map 2:a -shortest"
 
-    # Filtre grafiği: 9:16 kırp + hafif aydınlatma + (opsiyonel) küçük watermark
+    # 720x1280, hafif aydınlatma
     fc = (
-        "[0:v]fps=30,scale=-2:1920:force_original_aspect_ratio=decrease,"
-        "crop=1080:1920,eq=brightness=0.05:contrast=1.1:gamma=0.92[base];"
+        "[0:v]fps=30,scale=-2:1280:force_original_aspect_ratio=decrease,"
+        "crop=720:1280,eq=brightness=0.05:contrast=1.1:gamma=0.92[base];"
     )
     if use_logo:
         fc += (
             "[1]scale=-1:ih*0.10,format=rgba,colorchannelmixer=aa=0.60[wm];"
-            "[base][wm]overlay=W-w-40:H-h-40:format=auto[vid]"
+            "[base][wm]overlay=W-w-32:H-h-32:format=auto[vid]"
         )
     else:
         fc += " [base]format=yuv420p[vid]"
 
-    # Komut
+    # Hızlı encode + canlı ilerleme
     cmd = (
-        f'ffmpeg -y -hide_banner {inputs} -filter_complex "{fc}" '
+        f'ffmpeg -y -hide_banner -stats -loglevel info '
+        f'{inputs} -t {D} -filter_complex "{fc}" '
         f'-map "[vid]" {idx_audio_map} -shortest '
-        f'-c:v libx264 -pix_fmt yuv420p -b:v 6M -preset medium -r 30 '
-        f'-c:a aac -ar 44100 -b:a 192k -movflags +faststart "{outp}"'
+        f'-c:v libx264 -pix_fmt yuv420p -crf 26 -preset veryfast -r 30 '
+        f'-c:a aac -ar 44100 -b:a 128k -movflags +faststart "{outp}"'
     )
     return cmd
 
@@ -80,9 +81,8 @@ def main():
         D = ffprobe_duration(v)
         cmd = build_cmd(v, outp, music=m, dur_hint=D)
         print("[CMD]", cmd)
-        res = subprocess.run(cmd, shell=True, text=True, capture_output=True)
-        print(res.stdout); print(res.stderr)
-        res.check_returncode()
+        # Canlı ilerleme için capture_output=False
+        subprocess.run(cmd, shell=True, check=True)
         print("[OK]", outp)
 
 if __name__ == "__main__":
