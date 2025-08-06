@@ -61,8 +61,13 @@ def build_cmd(inp, outp, music=None, logo=LOGO, hook_text=None, dur_hint=None):
  [t1]drawbox=x=0:y=h-20:w=w*t/{D}:h=10:color=white@0.7:t=max[vid]
 """
 
-    cmd = f"""ffmpeg -y {inputs}{logo_part}{music_part} -filter_complex "{fc}" -map "[vid]" {idx_audio_map}  -c:v libx264 -pix_fmt yuv420p -b:v 6M -preset medium -r 30  -c:a aac -ar 44100 -b:a 192k -movflags +faststart "{outp}""""
-    return cmd
+   cmd = (
+    f'ffmpeg -y {inputs}{logo_part}{music_part} -filter_complex "{fc}" '
+    f'-map "[vid]" {idx_audio_map} -c:v libx264 -pix_fmt yuv420p -b:v 6M '
+    f'-preset medium -r 30 -c:a aac -ar 44100 -b:a 192k '
+    f'-movflags +faststart "{outp}"'
+)
+
 
 def main():
     pathlib.Path(OUT).mkdir(exist_ok=True)
