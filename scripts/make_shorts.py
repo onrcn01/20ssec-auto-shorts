@@ -6,7 +6,7 @@ OUT   = "outputs"
 MUSIC = "music"
 LOGO  = "logo/20ssec_logo.png"
 
-# Günlük üretilecek kısa video sayısı
+# Günlük üretilecek kısa video sayısı (env ile override edebilirsin)
 MAX_VIDS = int(os.getenv("MAX_VIDS", "5"))
 
 def ffprobe_duration(path: str):
@@ -14,7 +14,7 @@ def ffprobe_duration(path: str):
     try:
         out = subprocess.check_output(
             ["ffprobe","-v","error","-show_entries","format=duration",
-             "of=default=nw=1:nk=1".replace("of=","-of="), path],
+             "-of","default=nw=1:nk=1", path],
             text=True
         ).strip()
         return float(out)
@@ -30,10 +30,10 @@ def build_cmd(inp, outp, music=None, logo=LOGO, dur_hint=None):
     # Girişler
     inputs = f'-i "{inp}"'
 
-    # Logo: PNG tek kare → akış boyunca kullanmak için loopla
-    use_logo = False 
+    # Logo: bazı runner'larda image2 demuxer + framerate şart
+    use_logo = os.path.exists(logo)
     if use_logo:
-        inputs += f' -loop 1 -i "{logo}"'
+        inputs += f' -framerate 30 -loop 1 -f image2 -pattern_type none -i "{logo}"'
 
     # Müzik (varsa)
     idx_audio_map = "-an"
@@ -47,6 +47,7 @@ def build_cmd(inp, outp, music=None, logo=LOGO, dur_hint=None):
         "crop=1080:1920,eq=brightness=0.05:contrast=1.1:gamma=0.92[base];"
     )
 
+    last = "[base]"
     if use_logo:
         fc += (
             "[1]scale=-1:ih*0.10,format=rgba,colorchannelmixer=aa=0.60[wm];"
@@ -55,18 +56,16 @@ def build_cmd(inp, outp, music=None, logo=LOGO, dur_hint=None):
             f"[ol][wm2]overlay=(W-w)/2:(H-h)/2:enable='gte(t,{start_final_logo})'[ol2];"
         )
         last = "[ol2]"
-    else:
-        last = "[base]"
 
-    # Sadece progress bar (drawtext yok; stabil)
-    fc += f"{last}drawbox=x=0:y=h-20:w=w*t/{D}:h=10:color=white@0.7:t=max[vid]"
+    # Sadece progress bar (stabil): t=fill ve çıktıyı [vid] etiketine bağla
+    fc += f"{last}drawbox=x=0:y=h-20:w=w*(t/{D}):h=10:color=white@0.7:t=fill[vid]"
 
     # Komut
     cmd = (
         f'ffmpeg -y {inputs} -filter_complex "{fc}" '
-        f'-map "[vid]" {idx_audio_map} -c:v libx264 -pix_fmt yuv420p -b:v 6M '
-        f'-preset medium -r 30 -c:a aac -ar 44100 -b:a 192k '
-        f'-movflags +faststart "{outp}"'
+        f'-map "[vid]" {idx_audio_map} -shortest '
+        f'-c:v libx264 -pix_fmt yuv420p -b:v 6M -preset medium -r 30 '
+        f'-c:a aac -ar 44100 -b:a 192k -movflags +faststart "{outp}"'
     )
     return cmd
 
