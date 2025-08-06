@@ -35,38 +35,38 @@ def build_cmd(inp, outp, music=None, logo=LOGO, hook_text=None, dur_hint=None):
     logo_part = f' -i "{logo}"' if os.path.exists(logo) else ""
 
     font = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-    hook = (hook_text or random.choice(HOOKS)).replace('"','\"')
+    hook = (hook_text or random.choice(HOOKS)).replace('"', '\\"')
 
-    # 9:16 kırp + hafif aydınlatma + logo + hook + progress bar
-    fc = f"""
- [0:v]fps=30,scale=-2:1920:force_original_aspect_ratio=decrease,
-      crop=1080:1920,
-      eq=brightness=0.05:contrast=1.1:gamma=0.92[base];
-"""
+    # filter_complex metni
+    fc = (
+        "[0:v]fps=30,scale=-2:1920:force_original_aspect_ratio=decrease,"
+        "crop=1080:1920,eq=brightness=0.05:contrast=1.1:gamma=0.92[base];"
+    )
     if os.path.exists(logo):
-        fc += f"""
- [1]scale=-1:ih*0.10,format=rgba,colorchannelmixer=aa=0.6[wm];
- [base][wm]overlay=W-w-40:H-h-40:format=auto[ol];
- [1]scale=-1:ih*0.18,format=rgba[wm2];
- [ol][wm2]overlay=(W-w)/2:(H-h)/2:enable='gte(t,{start_final_logo})'[ol2];
-"""
+        fc += (
+            "[1]scale=-1:ih*0.10,format=rgba,colorchannelmixer=aa=0.6[wm];"
+            "[base][wm]overlay=W-w-40:H-h-40:format=auto[ol];"
+            "[1]scale=-1:ih*0.18,format=rgba[wm2];"
+            f"[ol][wm2]overlay=(W-w)/2:(H-h)/2:enable='gte(t,{start_final_logo})'[ol2];"
+        )
         last = "[ol2]"
     else:
         last = "[base]"
 
-    fc += f"""
- {last}drawtext=fontfile={font}:text='{hook}':x=(w-text_w)/2:y=20:
-        fontsize=64:fontcolor=white:box=1:boxcolor=black@0.5:boxborderw=20:
-        enable='lte(t,0.8)'[t1];
- [t1]drawbox=x=0:y=h-20:w=w*t/{D}:h=10:color=white@0.7:t=max[vid]
-"""
+    fc += (
+        f"{last}drawtext=fontfile={font}:text='{hook}':x=(w-text_w)/2:y=20:"
+        "fontsize=64:fontcolor=white:box=1:boxcolor=black@0.5:boxborderw=20:"
+        "enable='lte(t,0.8)'[t1];"
+        f"[t1]drawbox=x=0:y=h-20:w=w*t/{D}:h=10:color=white@0.7:t=max[vid]"
+    )
 
-   cmd = (
-    f'ffmpeg -y {inputs}{logo_part}{music_part} -filter_complex "{fc}" '
-    f'-map "[vid]" {idx_audio_map} -c:v libx264 -pix_fmt yuv420p -b:v 6M '
-    f'-preset medium -r 30 -c:a aac -ar 44100 -b:a 192k '
-    f'-movflags +faststart "{outp}"'
-)
+    cmd = (
+        f'ffmpeg -y {inputs}{logo_part}{music_part} -filter_complex "{fc}" '
+        f'-map "[vid]" {idx_audio_map} -c:v libx264 -pix_fmt yuv420p -b:v 6M '
+        f'-preset medium -r 30 -c:a aac -ar 44100 -b:a 192k '
+        f'-movflags +faststart "{outp}"'
+    )
+    return cmd
 
 
 def main():
