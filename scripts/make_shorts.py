@@ -6,6 +6,11 @@ OUT = "outputs"
 MUSIC = "music"
 LOGO = "logo/20ssec_logo.png"
 
+# Günlük üretilecek kısa video sayısı
+# İstersen Actions'da env olarak MAX_VIDS tanımlayıp burayı override edebilirsin.
+import os
+MAX_VIDS = int(os.getenv("MAX_VIDS", "5"))
+
 HOOKS = [
   "Name a cleaner 360",
   "Wait for it...",
@@ -13,6 +18,7 @@ HOOKS = [
   "Rate this 1-10",
   "He didnt turn he slid"
 ]
+
 
 
 def ffprobe_duration(path):
