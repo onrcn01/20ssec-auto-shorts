@@ -10,11 +10,9 @@ LOGO  = "logo/20ssec_logo.png"
 MAX_VIDS = int(os.getenv("MAX_VIDS", "5"))
 
 def ffprobe_duration(path: str):
-    """Videonun süresini sn cinsinden döndür (yoksa None)."""
     try:
         out = subprocess.check_output(
-            ["ffprobe","-v","error","-show_entries","format=duration",
-             "-of","default=nw=1:nk=1", path],
+            ["ffprobe","-v","error","-show_entries","format=duration","-of","default=nw=1:nk=1", path],
             text=True
         ).strip()
         return float(out)
@@ -22,15 +20,13 @@ def ffprobe_duration(path: str):
         return None
 
 def build_cmd(inp, outp, music=None, logo=LOGO, dur_hint=None):
-    # Süre ve parametreler
     D = dur_hint or ffprobe_duration(inp) or 12.0
     D = min(D, 20.0)
-    start_final_logo = max(D - 2.0, 0)
 
     # Girişler
     inputs = f'-i "{inp}"'
 
-    # Logo: bazı runner'larda image2 demuxer + framerate şart
+    # Logo (tek küçük watermark, tüm süre): image2 + loop güvenli
     use_logo = os.path.exists(logo)
     if use_logo:
         inputs += f' -framerate 30 -loop 1 -f image2 -pattern_type none -i "{logo}"'
@@ -49,20 +45,18 @@ def build_cmd(inp, outp, music=None, logo=LOGO, dur_hint=None):
 
     last = "[base]"
     if use_logo:
+        # sadece tek watermark: sağ-alt, %10 yükseklik
         fc += (
             "[1]scale=-1:ih*0.10,format=rgba,colorchannelmixer=aa=0.60[wm];"
             "[base][wm]overlay=W-w-40:H-h-40:format=auto[ol];"
-            "[1]scale=-1:ih*0.18,format=rgba[wm2];"
-            f"[ol][wm2]overlay=(W-w)/2:(H-h)/2:enable='gte(t,{start_final_logo})'[ol2];"
         )
-        last = "[ol2]"
+        last = "[ol]"
 
-    # Sadece progress bar (stabil): t=fill ve çıktıyı [vid] etiketine bağla
+    # Progress bar (stabil): t=fill ve çıktıyı [vid] olarak etiketle
     fc += f"{last}drawbox=x=0:y=h-20:w=w*(t/{D}):h=10:color=white@0.7:t=fill[vid]"
 
-    # Komut
     cmd = (
-        f'ffmpeg -y {inputs} -filter_complex "{fc}" '
+        f'ffmpeg -y -hide_banner {inputs} -filter_complex "{fc}" '
         f'-map "[vid]" {idx_audio_map} -shortest '
         f'-c:v libx264 -pix_fmt yuv420p -b:v 6M -preset medium -r 30 '
         f'-c:a aac -ar 44100 -b:a 192k -movflags +faststart "{outp}"'
